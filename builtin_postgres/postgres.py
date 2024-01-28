@@ -5,20 +5,16 @@ import shutil
 import os
 import platform
 import subprocess
+from zipfile import ZipFile
 
-DEFAULT_CONF = {
-}
-
-QUOTED_KEYS = [
-]
 
 class BuiltinPostgres:
-    def __init__(self, port=15432, bind='127.0.0.1'):
+    def __init__(self, data_dir=None, port=15432, bind='127.0.0.1'):
         self.postgres_process = None
-        self.conf = copy.deepcopy(DEFAULT_CONF)
         self.temp_root = None
-        self.set_conf('port', port)
-        self.set_conf('bind', bind)
+        self.data_dir = None
+        self.port = port
+        self.bind = bind
 
     def get_platform_name(self):
         system = platform.system().lower()
@@ -31,23 +27,40 @@ class BuiltinPostgres:
     def get_bin_name(self):
         system = platform.system().lower()
         if system == 'windows':
-            return 'postgres.exe'
+            return 'pg_ctl.exe'
         else:
-            return 'postgres'
+            return 'pg_ctl'
 
-    def set_conf(self, key, value):
-        pass
+    def get_bin_zip_name(self):
+        system = platform.system().lower()
+        machine = platform.machine().lower()
+        return "postgres-{}-{}.zip".format(system, machine)
 
 
-    def get_conf_content(self):
-        pass
+    def prepare_postgres_bin(self):
+        self.temp_root = tempfile.mkdtemp(prefix="builtin_postgres")
+        root = importlib.resources.files('builtin_postgres')
+        target = root.joinpath('bin', self.get_platform_name(),  self.get_bin_zip_name())
 
+        with importlib.resources.as_file(target) as taret_path:
+            name = os.path.splitext(target.name)[0]
+            postgres_bin = os.path.join(self.temp_root, name, "bin", self.get_bin_name())
+            with ZipFile(taret_path) as pgzip:
+                pgzip.extractall(self.temp_root)
+
+        return postgres_bin
+
+    def encode_parameters(self):
+        encoded = []
+        encoded.append("-p {}".format(self.port))
+        return '"{}"'.format(" ".join(encoded))
 
     def start(self):
         if self.postgres_process != None:
             return
-        postgres_bin, postgres_confpath = self.prepare_postgres_bin()
-        self.postgres_process = subprocess.Popen([postgres_bin, postgres_confpath], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        postgres_bin = self.prepare_postgres_bin()
+        start_args = [postgres_bin, "start", "-w", "-D", self.data_dir, "-o", self.ecncode_paramters()]
+        self.postgres_process = subprocess.Popen(start_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         try:
             outs, errs = self.postgres_process.communicate(timeout=3)
             self.postgres_process.kill()
