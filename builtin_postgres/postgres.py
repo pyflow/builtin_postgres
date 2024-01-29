@@ -10,11 +10,11 @@ from zipfile import ZipFile
 
 class BuiltinPostgres:
     def __init__(self, data_dir=None, port=15432, bind='127.0.0.1'):
-        self.postgres_process = None
         self.temp_root = None
         self.data_dir = None
         self.port = port
         self.bind = bind
+        self.started = False
 
     def get_platform_name(self):
         system = platform.system().lower()
@@ -56,25 +56,26 @@ class BuiltinPostgres:
         return '"{}"'.format(" ".join(encoded))
 
     def start(self):
-        if self.postgres_process != None:
+        if self.started:
             return
         postgres_bin = self.prepare_postgres_bin()
         start_args = [postgres_bin, "start", "-w", "-D", self.data_dir, "-o", self.ecncode_paramters()]
-        self.postgres_process = subprocess.Popen(start_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        postgres_process = subprocess.Popen(start_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
         try:
-            outs, errs = self.postgres_process.communicate(timeout=3)
-            self.postgres_process.kill()
-            self.postgres_process = None
-            raise Exception('BuiltPosgres Start Failed.')
+            outs, errs = postgres_process.communicate(timeout=12)
         except subprocess.TimeoutExpired:
-            return
+            raise Exception('BuiltPosgres Start Failed.')
+        self.started = True
 
 
     def stop(self):
-        if self.postgres_process != None:
-            self.postgres_process.kill()
-            self.postgres_process.wait(3)
-            self.postgres_process = None
+        postgres_bin = self.prepare_postgres_bin()
+        stop_args = [postgres_bin, "start", "-w", "-D", self.data_dir, "-o", self.ecncode_paramters()]
+        process = subprocess.Popen(stop_args, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+        try:
+            outs, errs = process.communicate(timeout=12)
+        except subprocess.TimeoutExpired:
+            raise Exception('BuiltPosgres Stop Failed.')
 
         if self.temp_root != None:
             # clear temp directory content
